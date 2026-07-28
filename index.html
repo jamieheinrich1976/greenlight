@@ -3,473 +3,500 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0B0E11">
-<title>GREENLIGHT — Live LA Parking</title>
+<meta name="theme-color" content="#05070C">
+<title>GREENLIGHT // LA PARKING GRID</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
   :root{
-    --asphalt:#0B0E11;
-    --panel:#12171De6;
-    --panel-solid:#12171D;
-    --line:#232B33;
-    --fog:#8A93A0;
-    --headlight:#F2F4F6;
-    --go:#2AE58D;
-    --stop:#FF4D5E;
-    --meter-amber:#D9A62E;
-    --radius:14px;
+    --void:#05070C;
+    --panel:#080D16d9;
+    --panel-solid:#0A101B;
+    --cyan:#00E5FF;
+    --cyan-dim:#00E5FF59;
+    --cyan-line:#00E5FF33;
+    --magenta:#FF2E9A;
+    --go:#00FF9C;
+    --stop:#FF3B4D;
+    --amber:#FFB020;
+    --fog:#6E86A0;
+    --white:#EAF6FF;
+    --chamfer:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%;overflow:hidden}
-  body{
-    font-family:'Archivo',system-ui,sans-serif;
-    background:var(--asphalt);
-    color:var(--headlight);
-  }
-  #map{position:fixed;inset:0;background:var(--asphalt)}
-  .leaflet-container{background:var(--asphalt);font:inherit}
+  body{font-family:'Share Tech Mono',monospace;background:var(--void);color:var(--white)}
 
-  /* ---------- top bar ---------- */
+  #map{position:fixed;inset:0;background:var(--void)}
+  .leaflet-container{background:var(--void)}
+  /* cool the basemap toward Tron blue */
+  .leaflet-tile-pane{filter:brightness(.72) contrast(1.15) saturate(.55) hue-rotate(165deg)}
+  /* neon bloom on every meter dot + route trail */
+  .leaflet-overlay-pane canvas, .leaflet-overlay-pane svg{filter:drop-shadow(0 0 5px rgba(0,229,255,.45)) drop-shadow(0 0 2px rgba(255,255,255,.35))}
+
+  /* ---------- atmosphere ---------- */
+  .fx{position:fixed;inset:0;pointer-events:none;z-index:500}
+  .fx.vignette{background:radial-gradient(120% 90% at 50% 40%, transparent 55%, #05070C 100%)}
+  .fx.scanlines{background:repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0,229,255,.018) 3px 4px);mix-blend-mode:screen}
+  .fx.sweep{overflow:hidden}
+  .fx.sweep::before{
+    content:"";position:absolute;left:0;right:0;height:120px;top:-20%;
+    background:linear-gradient(to bottom, transparent, rgba(0,229,255,.05), transparent);
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .fx.sweep::before{animation:sweep 9s linear infinite}
+    @keyframes sweep{0%{top:-15%}100%{top:110%}}
+  }
+  /* corner brackets */
+  .fx.frame::before,.fx.frame::after{content:"";position:absolute;width:26px;height:26px;border:1.5px solid var(--cyan-dim)}
+  .fx.frame::before{top:calc(env(safe-area-inset-top) + 8px);left:8px;border-right:0;border-bottom:0}
+  .fx.frame::after{top:calc(env(safe-area-inset-top) + 8px);right:8px;border-left:0;border-bottom:0}
+
+  /* ---------- top HUD ---------- */
   .topbar{
     position:fixed;top:0;left:0;right:0;z-index:1000;
-    padding:calc(env(safe-area-inset-top) + 12px) 14px 10px;
-    background:linear-gradient(to bottom, #0B0E11f2 0%, #0B0E11cc 60%, transparent 100%);
+    padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;
+    background:linear-gradient(to bottom,#05070Cf5 0%,#05070Cb8 65%,transparent);
     pointer-events:none;
   }
-  .brandrow{display:flex;align-items:baseline;justify-content:space-between;pointer-events:auto}
+  .brandrow{display:flex;align-items:center;justify-content:space-between;pointer-events:auto}
   .wordmark{
-    font-weight:900;font-stretch:118%;font-size:22px;letter-spacing:.06em;line-height:1;
+    font-family:'Orbitron',sans-serif;font-weight:900;font-size:20px;letter-spacing:.22em;line-height:1;
+    color:var(--white);text-shadow:0 0 12px rgba(0,229,255,.65),0 0 30px rgba(0,229,255,.3);
   }
-  .wordmark .green{color:var(--go)}
-  .statline{
-    font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--fog);
-    letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;
-  }
-  .statline b{color:var(--go);font-weight:600}
-  .statline .r{color:var(--stop);font-weight:600}
-  .chips{display:flex;gap:8px;margin-top:10px;overflow-x:auto;scrollbar-width:none;pointer-events:auto;padding-bottom:2px}
+  .wordmark .g{color:var(--go);text-shadow:0 0 12px rgba(0,255,156,.8),0 0 34px rgba(0,255,156,.4)}
+  .statline{font-size:11px;color:var(--fog);letter-spacing:.14em;text-align:right;line-height:1.5}
+  .statline b{color:var(--go);text-shadow:0 0 8px rgba(0,255,156,.7)}
+  .statline .r{color:var(--stop);text-shadow:0 0 8px rgba(255,59,77,.7)}
+  .chips{display:flex;gap:8px;margin-top:12px;overflow-x:auto;scrollbar-width:none;pointer-events:auto;padding:2px}
   .chips::-webkit-scrollbar{display:none}
   .chip{
-    flex:0 0 auto;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(12px);
-    color:var(--headlight);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;
-    padding:8px 14px;border-radius:999px;cursor:pointer;transition:border-color .18s,color .18s;
+    flex:0 0 auto;clip-path:var(--chamfer);
+    border:1px solid var(--cyan-line);background:var(--panel);backdrop-filter:blur(14px);
+    color:var(--fog);font-family:inherit;font-size:11.5px;letter-spacing:.16em;
+    padding:9px 15px;cursor:pointer;transition:.18s;
   }
-  .chip.active{border-color:var(--go);color:var(--go)}
-  .chip:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+  .chip.active{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 14px rgba(0,229,255,.35),inset 0 0 10px rgba(0,229,255,.08);text-shadow:0 0 8px rgba(0,229,255,.8)}
+  .chip:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+
+  /* ---------- GUIDE ME ---------- */
+  .guide{
+    position:fixed;left:50%;transform:translateX(-50%);z-index:1002;
+    bottom:calc(env(safe-area-inset-bottom) + 14px);
+    clip-path:var(--chamfer);
+    font-family:'Orbitron',sans-serif;font-weight:700;font-size:13px;letter-spacing:.3em;
+    color:var(--void);background:var(--go);border:0;padding:15px 30px 15px 34px;cursor:pointer;
+    box-shadow:0 0 22px rgba(0,255,156,.55),0 0 60px rgba(0,255,156,.25);
+    transition:bottom .2s;
+  }
+  .guide:active{filter:brightness(1.2)}
+  .guide[disabled]{background:#12202E;color:var(--fog);box-shadow:none}
+
+  /* ---------- HUD card (route result) ---------- */
+  .hud{
+    position:fixed;left:12px;right:12px;z-index:1001;display:none;
+    bottom:calc(env(safe-area-inset-bottom) + 74px);
+    clip-path:var(--chamfer);
+    background:var(--panel);backdrop-filter:blur(16px);border:1px solid rgba(0,255,156,.45);
+    box-shadow:0 0 24px rgba(0,255,156,.18);
+    padding:14px 16px;
+  }
+  .hud.show{display:flex;align-items:center;gap:16px}
+  .hud-big{font-family:'Orbitron',sans-serif;font-weight:900;font-size:24px;color:var(--go);text-shadow:0 0 14px rgba(0,255,156,.7);line-height:1}
+  .hud-big small{display:block;font-family:'Share Tech Mono',monospace;font-weight:400;font-size:9.5px;color:var(--fog);letter-spacing:.18em;margin-top:5px}
+  .hud-mid{flex:1;min-width:0}
+  .hud-addr{font-size:13px;color:var(--white);letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hud-meta{font-size:10.5px;color:var(--fog);margin-top:4px;letter-spacing:.08em}
+  .hud a{clip-path:var(--chamfer);border:1px solid var(--go);color:var(--go);text-decoration:none;font-size:11px;letter-spacing:.18em;padding:11px 14px;white-space:nowrap}
+  .hud .x{position:absolute;top:4px;right:8px;background:none;border:0;color:var(--fog);font-size:15px;cursor:pointer;padding:4px}
 
   /* ---------- bottom sheet ---------- */
   .sheet{
-    position:fixed;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom) + 10px);z-index:1000;
-    background:var(--panel);backdrop-filter:blur(16px);
-    border:1px solid var(--line);border-radius:var(--radius);
-    overflow:hidden;
+    position:fixed;left:12px;right:12px;z-index:1000;display:none;
+    bottom:calc(env(safe-area-inset-bottom) + 74px);
+    clip-path:var(--chamfer);
+    background:var(--panel);backdrop-filter:blur(16px);border:1px solid var(--cyan-line);
   }
-  .sheet-head{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:10px 14px;border-bottom:1px solid var(--line);
-  }
-  .sheet-title{
-    font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--fog);
-  }
-  .pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--go);margin-right:7px;vertical-align:1px}
-  @media (prefers-reduced-motion:no-preference){
-    .pulse{animation:pulse 2s ease-in-out infinite}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
-  }
-  .countdown{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--fog)}
-  .spots{max-height:34vh;overflow-y:auto}
-  .spot{
-    display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;
-    padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;
-  }
-  .spot:last-child{border-bottom:none}
-  .spot:active{background:#1A222B}
-  .spot-dist{
-    font-family:'JetBrains Mono',monospace;font-weight:600;font-size:13px;color:var(--go);
-    display:flex;flex-direction:column;line-height:1.15;
-  }
-  .spot-dist small{font-weight:400;font-size:9px;color:var(--fog);letter-spacing:.08em}
-  .spot-addr{font-weight:700;font-size:14px;letter-spacing:.01em}
-  .spot-meta{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--fog);margin-top:3px}
-  .go-btn{
-    border:1px solid var(--go);color:var(--go);background:transparent;
-    font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.12em;
-    padding:9px 13px;border-radius:8px;cursor:pointer;white-space:nowrap;
-  }
-  .go-btn:active{background:var(--go);color:var(--asphalt)}
-  .empty{
-    padding:22px 16px;text-align:center;color:var(--fog);
-    font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.7;letter-spacing:.04em;
-  }
-  .empty b{color:var(--headlight)}
+  .sheet.show{display:block}
+  .sheet-head{display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid var(--cyan-line)}
+  .sheet-title{font-size:10.5px;letter-spacing:.22em;color:var(--cyan)}
+  .countdown{font-size:10.5px;color:var(--fog);letter-spacing:.1em}
+  .spots{max-height:32vh;overflow-y:auto}
+  .spot{display:grid;grid-template-columns:52px 1fr auto;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid #0F1B2A;cursor:pointer}
+  .spot:last-child{border-bottom:0}
+  .spot:active{background:#0D1826}
+  .spot-dist{color:var(--go);font-size:13.5px;text-shadow:0 0 8px rgba(0,255,156,.6);line-height:1.2}
+  .spot-dist small{display:block;font-size:8.5px;color:var(--fog);letter-spacing:.14em;text-shadow:none}
+  .spot-addr{font-size:12.5px;letter-spacing:.04em}
+  .spot-meta{font-size:10px;color:var(--fog);margin-top:3px;letter-spacing:.06em}
+  .go-btn{clip-path:var(--chamfer);border:1px solid var(--go);color:var(--go);background:transparent;font-family:inherit;font-size:10px;letter-spacing:.18em;padding:9px 12px;cursor:pointer;text-decoration:none}
+  .empty{padding:22px 16px;text-align:center;color:var(--fog);font-size:11px;line-height:1.8;letter-spacing:.08em}
+  .empty b{color:var(--cyan)}
 
-  /* ---------- floating controls ---------- */
-  .fab-col{position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom) + 10px);z-index:999;display:flex;flex-direction:column;gap:8px;transition:bottom .2s}
+  /* ---------- side controls ---------- */
+  .fab-col{position:fixed;right:12px;top:50%;transform:translateY(-50%);z-index:999;display:flex;flex-direction:column;gap:10px}
   .fab{
-    width:44px;height:44px;border-radius:12px;border:1px solid var(--line);
-    background:var(--panel);backdrop-filter:blur(12px);color:var(--headlight);
-    display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px;
+    width:44px;height:44px;clip-path:var(--chamfer);
+    border:1px solid var(--cyan-line);background:var(--panel);backdrop-filter:blur(12px);
+    color:var(--cyan);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;font-family:inherit;
   }
-  .fab:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+  .fab:active{box-shadow:0 0 14px rgba(0,229,255,.4)}
+  .fab:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 
   /* ---------- legend ---------- */
   .legend{
-    position:fixed;left:12px;z-index:999;
-    display:flex;gap:12px;padding:7px 12px;border-radius:999px;
-    background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(12px);
-    font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;color:var(--fog);
-    text-transform:uppercase;transition:bottom .2s;
+    position:fixed;left:12px;bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:998;
+    display:flex;flex-direction:column;gap:5px;padding:9px 12px;clip-path:var(--chamfer);
+    background:var(--panel);border:1px solid var(--cyan-line);backdrop-filter:blur(12px);
+    font-size:9px;letter-spacing:.16em;color:var(--fog);
   }
-  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:-.5px}
-  .dot.g{background:var(--go)} .dot.r{background:var(--stop)} .dot.a{background:var(--meter-amber)}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px;vertical-align:-1px}
+  .dot.g{background:var(--go);box-shadow:0 0 7px var(--go)}
+  .dot.r{background:var(--stop);box-shadow:0 0 7px var(--stop)}
+  .dot.a{background:var(--amber);box-shadow:0 0 6px var(--amber)}
 
   /* ---------- banner ---------- */
   .banner{
-    position:fixed;top:calc(env(safe-area-inset-top) + 88px);left:12px;right:12px;z-index:1001;
-    background:var(--panel-solid);border:1px solid var(--stop);border-radius:10px;
-    padding:12px 14px;font-size:12.5px;line-height:1.6;color:var(--headlight);display:none;
+    position:fixed;top:calc(env(safe-area-inset-top) + 108px);left:12px;right:12px;z-index:1003;display:none;
+    clip-path:var(--chamfer);background:var(--panel-solid);border:1px solid var(--stop);
+    box-shadow:0 0 18px rgba(255,59,77,.25);
+    padding:13px 15px;font-size:12px;line-height:1.7;letter-spacing:.03em;
   }
   .banner.show{display:block}
   .banner b{color:var(--stop)}
 
-  /* ---------- leaflet popup ---------- */
-  .leaflet-popup-content-wrapper{
-    background:var(--panel-solid);color:var(--headlight);border:1px solid var(--line);
-    border-radius:10px;box-shadow:0 8px 30px #000a;
-  }
+  /* ---------- popup ---------- */
+  .leaflet-popup-content-wrapper{background:var(--panel-solid);color:var(--white);border:1px solid var(--cyan-line);border-radius:0;clip-path:var(--chamfer);box-shadow:0 0 24px rgba(0,229,255,.15)}
   .leaflet-popup-tip{background:var(--panel-solid)}
-  .leaflet-popup-content{margin:12px 14px;font-family:'Archivo',sans-serif}
-  .pp-state{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.16em}
-  .pp-state.v{color:var(--go)} .pp-state.o{color:var(--stop)} .pp-state.u{color:var(--meter-amber)}
-  .pp-addr{font-weight:800;font-size:14px;margin:4px 0 2px}
-  .pp-meta{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--fog);line-height:1.7}
-  .pp-nav{display:inline-block;margin-top:8px;color:var(--go);font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.1em;text-decoration:none;border-bottom:1px solid var(--go)}
-  .leaflet-control-attribution{background:#0B0E11cc !important;color:#5c6570 !important;font-size:9px !important}
-  .leaflet-control-attribution a{color:#7d8792 !important}
-  .leaflet-top.leaflet-left{top:auto}
+  .leaflet-popup-content{margin:13px 15px;font-family:'Share Tech Mono',monospace}
+  .pp-state{font-size:9.5px;letter-spacing:.24em}
+  .pp-state.v{color:var(--go);text-shadow:0 0 8px rgba(0,255,156,.7)}
+  .pp-state.o{color:var(--stop);text-shadow:0 0 8px rgba(255,59,77,.7)}
+  .pp-state.u{color:var(--amber)}
+  .pp-addr{font-family:'Orbitron',sans-serif;font-weight:700;font-size:12px;margin:6px 0 3px;letter-spacing:.06em}
+  .pp-meta{font-size:10px;color:var(--fog);line-height:1.8;letter-spacing:.05em}
+  .pp-nav{display:inline-block;margin-top:9px;color:var(--go);font-size:10.5px;letter-spacing:.18em;text-decoration:none;border-bottom:1px solid var(--go)}
+  .leaflet-control-attribution{background:#05070Ccc !important;color:#4A5A6E !important;font-size:8.5px !important}
+  .leaflet-control-attribution a{color:#5E7185 !important}
   .leaflet-control-zoom{display:none}
 </style>
 </head>
 <body>
 
 <div id="map"></div>
+<div class="fx vignette"></div>
+<div class="fx scanlines"></div>
+<div class="fx sweep"></div>
+<div class="fx frame"></div>
 
 <header class="topbar">
   <div class="brandrow">
-    <div class="wordmark">GREEN<span class="green">LIGHT</span></div>
-    <div class="statline" id="statline">CONNECTING TO LADOT&hellip;</div>
+    <div class="wordmark">GREEN<span class="g">LIGHT</span></div>
+    <div class="statline" id="statline">LINKING GRID&hellip;</div>
   </div>
   <nav class="chips" id="chips">
-    <button class="chip active" data-area="dtla"  data-lat="34.0480" data-lng="-118.2520" data-z="16">DTLA</button>
-    <button class="chip" data-area="hollywood"    data-lat="34.1016" data-lng="-118.3387" data-z="16">HOLLYWOOD</button>
-    <button class="chip" data-area="westwood"     data-lat="34.0611" data-lng="-118.4460" data-z="16">WESTWOOD</button>
-    <button class="chip" id="locateChip">&#9678; MY LOCATION</button>
+    <button class="chip active" data-lat="34.035" data-lng="-118.32" data-z="11">ALL LA</button>
+    <button class="chip" data-lat="34.0480" data-lng="-118.2520" data-z="16">DTLA</button>
+    <button class="chip" data-lat="34.1016" data-lng="-118.3387" data-z="16">HOLLYWOOD</button>
+    <button class="chip" data-lat="34.0611" data-lng="-118.4460" data-z="16">WESTWOOD</button>
+    <button class="chip" data-lat="33.9905" data-lng="-118.4650" data-z="15">VENICE</button>
+    <button class="chip" data-lat="34.0908" data-lng="-118.2786" data-z="15">SILVER LAKE</button>
   </nav>
 </header>
 
 <div class="banner" id="banner"></div>
 
-<div class="legend" id="legend" style="bottom:calc(env(safe-area-inset-bottom) + 10px)">
-  <span><span class="dot g"></span>Open</span>
-  <span><span class="dot r"></span>Taken</span>
-  <span><span class="dot a"></span>No sensor</span>
+<div class="legend">
+  <span><span class="dot g"></span>OPEN</span>
+  <span><span class="dot r"></span>TAKEN</span>
+  <span><span class="dot a"></span>METER / NO SENSOR</span>
 </div>
 
-<div class="fab-col" id="fabCol">
-  <button class="fab" id="refreshBtn" title="Refresh now" aria-label="Refresh occupancy now">&#8635;</button>
-  <button class="fab" id="sheetBtn" title="Nearest open meters" aria-label="Toggle nearest open meters">&#9776;</button>
+<div class="fab-col">
+  <button class="fab" id="refreshBtn" title="Refresh" aria-label="Refresh live occupancy">&#8635;</button>
+  <button class="fab" id="sheetBtn" title="Nearest open" aria-label="Toggle nearest open list">&#9776;</button>
+  <button class="fab" id="locBtn" title="My location" aria-label="Center on my location">&#9678;</button>
 </div>
 
-<section class="sheet" id="sheet" hidden>
+<section class="hud" id="hud">
+  <button class="x" id="hudClose" aria-label="Dismiss route">&times;</button>
+  <div class="hud-big" id="hudEta">--<small id="hudDist">ROUTE</small></div>
+  <div class="hud-mid">
+    <div class="hud-addr" id="hudAddr"></div>
+    <div class="hud-meta" id="hudMeta"></div>
+  </div>
+  <a id="hudNav" href="#" target="_blank" rel="noopener">START&nbsp;NAV</a>
+</section>
+
+<section class="sheet" id="sheet">
   <div class="sheet-head">
-    <div class="sheet-title"><span class="pulse"></span>Nearest open meters</div>
+    <div class="sheet-title">// NEAREST OPEN METERS</div>
     <div class="countdown" id="countdown">--</div>
   </div>
-  <div class="spots" id="spots">
-    <div class="empty">Move the map over a sensor zone.<br><b>DTLA · Hollywood · Westwood</b></div>
-  </div>
+  <div class="spots" id="spots"><div class="empty">SCANNING&hellip;</div></div>
 </section>
+
+<button class="guide" id="guideBtn">&#9654;&nbsp;GUIDE&nbsp;ME</button>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 (function(){
   "use strict";
+  var INVENTORY_URL = "https://data.lacity.org/resource/s49e-q6j2.json";
+  var OCCUPANCY_URL = "https://data.lacity.org/resource/e7h6-4a3e.json";
+  var OSRM = "https://router.project-osrm.org/route/v1/driving/";
+  var REFRESH_SECS = 60, MAX_DOTS = 9000;
 
-  // ---------------- config ----------------
-  var INVENTORY_URL = "https://data.lacity.org/resource/s49e-q6j2.json"; // LADOT Metered Parking Inventory & Policies
-  var OCCUPANCY_URL = "https://data.lacity.org/resource/e7h6-4a3e.json"; // LADOT Parking Meter Occupancy (live)
-  var REFRESH_SECS  = 60;
-
-  // ---------------- map ----------------
-  var map = L.map("map", { zoomControl:false, attributionControl:true })
-             .setView([34.0480, -118.2520], 16);
-
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution:'&copy; OpenStreetMap &copy; CARTO · Data: LADOT / LA Open Data',
-    maxZoom:19, subdomains:"abcd"
+  var map = L.map("map",{zoomControl:false}).setView([34.035,-118.32],11);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
+    attribution:'&copy; OSM &copy; CARTO · LADOT / LA Open Data · OSRM',maxZoom:19,subdomains:"abcd"
   }).addTo(map);
 
-  var canvas = L.canvas({ padding:0.4 });
+  var canvas = L.canvas({padding:.4});
   var markerLayer = L.layerGroup().addTo(map);
-  var youMarker = null;
+  var routeLayer = L.layerGroup().addTo(map);
 
-  // ---------------- state ----------------
-  var inventory = {};      // spaceid -> {lat,lng,addr,rate,limit,policy}
-  var occupancy = {};      // spaceid -> "VACANT" | "OCCUPIED"
-  var markers = {};        // spaceid -> circleMarker
-  var userPos = null;
-  var timerLeft = REFRESH_SECS;
-  var loaded = false;
+  var inventory={}, occupancy={}, markers={}, userPos=null, youMarker=null;
+  var timerLeft=REFRESH_SECS, loaded=false;
+  var $=function(id){return document.getElementById(id);};
 
-  var $ = function(id){ return document.getElementById(id); };
+  function banner(msg){var b=$("banner"); if(!msg){b.classList.remove("show");return;} b.innerHTML=msg;b.classList.add("show");}
 
-  function banner(msg){
-    var b = $("banner");
-    if(!msg){ b.classList.remove("show"); return; }
-    b.innerHTML = msg; b.classList.add("show");
-  }
-
-  // ---------------- data: inventory ----------------
-  function parseLatLng(row){
-    var ll = row.latlng || row.location || null;
+  // ---------- data ----------
+  function parseLatLng(r){
+    var ll=r.latlng||r.location||null;
     if(ll){
-      if(ll.latitude !== undefined) return [parseFloat(ll.latitude), parseFloat(ll.longitude)];
-      if(ll.coordinates)            return [parseFloat(ll.coordinates[1]), parseFloat(ll.coordinates[0])];
+      if(ll.latitude!==undefined) return [parseFloat(ll.latitude),parseFloat(ll.longitude)];
+      if(ll.coordinates) return [parseFloat(ll.coordinates[1]),parseFloat(ll.coordinates[0])];
     }
-    if(row.lat !== undefined && (row.lon !== undefined || row.lng !== undefined))
-      return [parseFloat(row.lat), parseFloat(row.lon !== undefined ? row.lon : row.lng)];
+    if(r.lat!==undefined) return [parseFloat(r.lat),parseFloat(r.lon!==undefined?r.lon:r.lng)];
     return null;
   }
-
   function loadInventory(){
-    // Try a viewport query first; fall back to a bulk pull if the field name differs.
-    var b = map.getBounds().pad(0.6);
-    var whereUrl = INVENTORY_URL + "?$limit=8000&$where=" + encodeURIComponent(
-      "within_box(latlng," + b.getNorth() + "," + b.getWest() + "," + b.getSouth() + "," + b.getEast() + ")"
-    );
-    return fetch(whereUrl)
-      .then(function(r){ if(!r.ok) throw new Error("box query " + r.status); return r.json(); })
-      .catch(function(){ return fetch(INVENTORY_URL + "?$limit=40000").then(function(r){
-          if(!r.ok) throw new Error("inventory " + r.status); return r.json(); }); })
+    return fetch(INVENTORY_URL+"?$limit=45000")
+      .then(function(r){if(!r.ok)throw 0;return r.json();})
       .then(function(rows){
         rows.forEach(function(row){
-          var id = row.spaceid || row.space_id || row.meterid;
-          var pos = parseLatLng(row);
-          if(!id || !pos || isNaN(pos[0])) return;
-          inventory[id] = {
-            lat:pos[0], lng:pos[1],
-            addr:  row.blockface || row.block_face || ("Meter " + id),
-            rate:  row.raterange || row.rate_range || row.rate || "",
-            limit: row.metered_time_limit || row.timelimit || row.time_limit || "",
-            policy:row.parkingpolicy || row.parking_policy || ""
-          };
+          var id=row.spaceid||row.space_id||row.meterid;
+          var pos=parseLatLng(row);
+          if(!id||!pos||isNaN(pos[0]))return;
+          inventory[id]={lat:pos[0],lng:pos[1],
+            addr:row.blockface||row.block_face||("METER "+id),
+            rate:row.raterange||row.rate_range||row.rate||"",
+            limit:row.metered_time_limit||row.timelimit||row.time_limit||"",
+            policy:row.parkingpolicy||row.parking_policy||""};
         });
       });
   }
-
-  // ---------------- data: occupancy ----------------
   function loadOccupancy(){
-    return fetch(OCCUPANCY_URL + "?$limit=20000")
-      .then(function(r){ if(!r.ok) throw new Error("occupancy " + r.status); return r.json(); })
+    return fetch(OCCUPANCY_URL+"?$limit=20000")
+      .then(function(r){if(!r.ok)throw 0;return r.json();})
       .then(function(rows){
-        occupancy = {};
+        occupancy={};
         rows.forEach(function(row){
-          var id = row.spaceid || row.space_id;
-          var st = String(row.occupancystate || row.occupancy_state || "").toUpperCase();
-          if(id && st) occupancy[id] = st;
+          var id=row.spaceid||row.space_id;
+          var st=String(row.occupancystate||row.occupancy_state||"").toUpperCase();
+          if(id&&st)occupancy[id]=st;
         });
       });
   }
 
-  // ---------------- render ----------------
-  function stateOf(id){
-    var s = occupancy[id];
-    if(s === "VACANT") return "open";
-    if(s === "OCCUPIED") return "taken";
-    return "unknown";
-  }
-  var COLORS = { open:"#2AE58D", taken:"#FF4D5E", unknown:"#D9A62E" };
+  // ---------- render ----------
+  function stateOf(id){var s=occupancy[id];return s==="VACANT"?"open":s==="OCCUPIED"?"taken":"unknown";}
+  var COLORS={open:"#00FF9C",taken:"#FF3B4D",unknown:"#FFB020"};
+  function hash(s){var h=0;for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;}return Math.abs(h);}
+  function radiusFor(z,st){var r=z>=17?6:z>=15?4.5:z>=13?3:2;return st==="unknown"?r*.72:r;}
 
-  function popupHtml(id, item, st){
-    var label = st==="open" ? "&#9679; OPEN NOW" : st==="taken" ? "&#9679; TAKEN" : "&#9679; NO LIVE SENSOR";
-    var cls   = st==="open" ? "v" : st==="taken" ? "o" : "u";
-    var nav = "https://www.google.com/maps/dir/?api=1&destination=" + item.lat + "," + item.lng;
-    return '<div class="pp-state ' + cls + '">' + label + '</div>' +
-           '<div class="pp-addr">' + item.addr + '</div>' +
-           '<div class="pp-meta">Space ' + id +
-             (item.rate  ? ' &middot; ' + item.rate : '') +
-             (item.limit ? ' &middot; ' + item.limit + ' limit' : '') +
-             (item.policy? '<br>' + item.policy : '') + '</div>' +
-           '<a class="pp-nav" href="' + nav + '" target="_blank" rel="noopener">NAVIGATE &rarr;</a>';
+  function popupHtml(id,it,st){
+    var lbl=st==="open"?"&#9679; OPEN NOW":st==="taken"?"&#9679; TAKEN":"&#9679; METER · NO LIVE SENSOR";
+    var cls=st==="open"?"v":st==="taken"?"o":"u";
+    var nav="https://www.google.com/maps/dir/?api=1&destination="+it.lat+","+it.lng;
+    return '<div class="pp-state '+cls+'">'+lbl+'</div><div class="pp-addr">'+it.addr+'</div>'+
+      '<div class="pp-meta">SPACE '+id+(it.rate?' · '+it.rate:'')+(it.limit?' · '+it.limit+' LIMIT':'')+(it.policy?'<br>'+it.policy:'')+'</div>'+
+      '<a class="pp-nav" href="'+nav+'" target="_blank" rel="noopener">NAVIGATE &rarr;</a>';
   }
 
   function render(){
-    var b = map.getBounds().pad(0.15);
-    var zoom = map.getZoom();
-    if(zoom < 14){ markerLayer.clearLayers(); markers = {}; updateStats(); updateSheet(); return; }
-
-    var wanted = {};
+    var b=map.getBounds().pad(.15), z=map.getZoom();
+    var inView=[];
     Object.keys(inventory).forEach(function(id){
-      var it = inventory[id];
-      if(!b.contains([it.lat, it.lng])) return;
-      wanted[id] = true;
-      var st = stateOf(id);
-      var m = markers[id];
+      var it=inventory[id];
+      if(b.contains([it.lat,it.lng]))inView.push(id);
+    });
+    var stride=inView.length>MAX_DOTS?Math.ceil(inView.length/MAX_DOTS):1;
+    var wanted={};
+    inView.forEach(function(id){
+      if(stride>1 && hash(id)%stride!==0 && stateOf(id)==="unknown")return; // always keep live-sensor dots
+      wanted[id]=true;
+      var it=inventory[id],st=stateOf(id),m=markers[id];
+      var style={renderer:canvas,radius:radiusFor(z,st),color:"#05070C",weight:1,
+                 fillColor:COLORS[st],fillOpacity:st==="unknown"?.55:.95};
       if(!m){
-        m = L.circleMarker([it.lat, it.lng], {
-          renderer:canvas, radius: st==="unknown" ? 3.5 : 5.5,
-          color:"#0B0E11", weight:1.5, fillColor:COLORS[st], fillOpacity: st==="unknown" ? .5 : .95
-        }).addTo(markerLayer);
-        m.bindPopup(function(){ return popupHtml(id, inventory[id], stateOf(id)); });
-        markers[id] = m;
-      } else {
-        m.setStyle({ fillColor:COLORS[st], radius: st==="unknown" ? 3.5 : 5.5, fillOpacity: st==="unknown" ? .5 : .95 });
-      }
+        m=L.circleMarker([it.lat,it.lng],style).addTo(markerLayer);
+        m.bindPopup(function(){return popupHtml(id,inventory[id],stateOf(id));});
+        markers[id]=m;
+      } else m.setStyle(style);
     });
     Object.keys(markers).forEach(function(id){
-      if(!wanted[id]){ markerLayer.removeLayer(markers[id]); delete markers[id]; }
+      if(!wanted[id]){markerLayer.removeLayer(markers[id]);delete markers[id];}
     });
     updateStats(); updateSheet();
   }
 
   function updateStats(){
-    var open=0, taken=0;
-    var b = map.getBounds();
+    if(!loaded)return;
+    var open=0,taken=0,b=map.getBounds();
     Object.keys(markers).forEach(function(id){
-      var it = inventory[id];
-      if(!b.contains([it.lat,it.lng])) return;
-      var st = stateOf(id);
-      if(st==="open") open++; else if(st==="taken") taken++;
+      var it=inventory[id];
+      if(!b.contains([it.lat,it.lng]))return;
+      var st=stateOf(id);
+      if(st==="open")open++;else if(st==="taken")taken++;
     });
-    if(!loaded) return;
-    if(open+taken === 0){
-      $("statline").innerHTML = map.getZoom()<14 ? "ZOOM IN TO SCAN" : "NO SENSORS IN FRAME";
-    } else {
-      $("statline").innerHTML = "<b>" + open + " OPEN</b> &middot; <span class='r'>" + taken + " TAKEN</span>";
-    }
+    $("statline").innerHTML = open+taken===0
+      ? Object.keys(markers).length+" METERS IN FRAME<br>NO LIVE SENSORS HERE"
+      : "<b>"+open+" OPEN</b> · <span class='r'>"+taken+" TAKEN</span>";
   }
 
-  // ---------------- nearest open ----------------
-  function dist(a,b,c,d){
-    var R=6371000, p=Math.PI/180;
-    var x=(c-a)*p, y=(d-b)*p;
-    var h=Math.sin(x/2)*Math.sin(x/2)+Math.cos(a*p)*Math.cos(c*p)*Math.sin(y/2)*Math.sin(y/2);
-    return 2*R*Math.asin(Math.sqrt(h));
-  }
-  function fmtDist(m){
-    if(m < 300) return Math.round(m/10)*10 + "m";
-    return (m/1609).toFixed(1) + "mi";
-  }
-  function parseRate(rate){
-    var m = /([\d.]+)/.exec(rate||""); return m ? parseFloat(m[1]) : 99;
+  // ---------- nearest / guide ----------
+  function dist(a,b,c,d){var R=6371000,p=Math.PI/180,x=(c-a)*p,y=(d-b)*p,
+    h=Math.sin(x/2)*Math.sin(x/2)+Math.cos(a*p)*Math.cos(c*p)*Math.sin(y/2)*Math.sin(y/2);
+    return 2*R*Math.asin(Math.sqrt(h));}
+  function fmtDist(m){return m<300?Math.round(m/10)*10+"M":(m/1609).toFixed(1)+"MI";}
+  function parseRate(r){var m=/([\d.]+)/.exec(r||"");return m?parseFloat(m[1]):99;}
+
+  function bestOpen(origin,maxM){
+    var out=[];
+    Object.keys(inventory).forEach(function(id){
+      if(stateOf(id)!=="open")return;
+      var it=inventory[id],d=dist(origin[0],origin[1],it.lat,it.lng);
+      if(d>maxM)return;
+      out.push({id:id,it:it,d:d});
+    });
+    out.sort(function(a,b){return (a.d+parseRate(a.it.rate)*40)-(b.d+parseRate(b.it.rate)*40);});
+    return out;
   }
 
   function updateSheet(){
-    var origin = userPos || [map.getCenter().lat, map.getCenter().lng];
-    var open = [];
-    Object.keys(inventory).forEach(function(id){
-      if(stateOf(id)!=="open") return;
-      var it = inventory[id];
-      var d = dist(origin[0],origin[1],it.lat,it.lng);
-      if(d > 2500) return;
-      open.push({id:id, it:it, d:d});
-    });
-    // rank: mostly distance, nudged by price (cheaper = better parking)
-    open.sort(function(a,b){ return (a.d + parseRate(a.it.rate)*40) - (b.d + parseRate(b.it.rate)*40); });
-    open = open.slice(0,4);
-
-    var el = $("spots");
+    var origin=userPos||[map.getCenter().lat,map.getCenter().lng];
+    var open=bestOpen(origin,3000).slice(0,4);
+    var el=$("spots");
     if(!open.length){
-      el.innerHTML = '<div class="empty">No open sensored meters in range.<br><b>Try DTLA, Hollywood or Westwood</b> — those are the zones LADOT has live sensors in.</div>';
+      el.innerHTML='<div class="empty">NO OPEN SENSORED METERS IN RANGE.<br>LIVE SENSORS COVER <b>DTLA · HOLLYWOOD · WESTWOOD</b>.<br>AMBER DOTS = METERS WITHOUT SENSORS.</div>';
       return;
     }
-    el.innerHTML = open.map(function(s){
-      var nav = "https://www.google.com/maps/dir/?api=1&destination=" + s.it.lat + "," + s.it.lng;
-      return '<div class="spot" data-lat="'+s.it.lat+'" data-lng="'+s.it.lng+'" data-id="'+s.id+'">' +
-        '<div class="spot-dist">'+fmtDist(s.d)+'<small>'+(userPos?"FROM YOU":"FROM VIEW")+'</small></div>' +
-        '<div><div class="spot-addr">'+s.it.addr+'</div>' +
-        '<div class="spot-meta">'+ [s.it.rate, s.it.limit ? s.it.limit+" limit" : ""].filter(Boolean).join(" · ") +'</div></div>' +
-        '<a class="go-btn" href="'+nav+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">GO &rarr;</a></div>';
+    el.innerHTML=open.map(function(s){
+      var nav="https://www.google.com/maps/dir/?api=1&destination="+s.it.lat+","+s.it.lng;
+      return '<div class="spot" data-lat="'+s.it.lat+'" data-lng="'+s.it.lng+'" data-id="'+s.id+'">'+
+        '<div class="spot-dist">'+fmtDist(s.d)+'<small>'+(userPos?"FROM YOU":"FROM VIEW")+'</small></div>'+
+        '<div><div class="spot-addr">'+s.it.addr+'</div>'+
+        '<div class="spot-meta">'+[s.it.rate,s.it.limit?s.it.limit+" LIMIT":""].filter(Boolean).join(" · ")+'</div></div>'+
+        '<a class="go-btn" href="'+nav+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">GO</a></div>';
     }).join("");
-    Array.prototype.forEach.call(el.querySelectorAll(".spot"), function(node){
-      node.addEventListener("click", function(){
-        var la=parseFloat(node.dataset.lat), ln=parseFloat(node.dataset.lng);
-        map.setView([la,ln], 18);
-        var m = markers[node.dataset.id];
-        if(m) m.openPopup();
+    Array.prototype.forEach.call(el.querySelectorAll(".spot"),function(n){
+      n.addEventListener("click",function(){
+        map.setView([parseFloat(n.dataset.lat),parseFloat(n.dataset.lng)],18);
+        var m=markers[n.dataset.id]; if(m)m.openPopup();
       });
     });
   }
 
-  // ---------------- refresh loop ----------------
-  function refresh(){
-    $("refreshBtn").style.opacity = .4;
-    loadOccupancy()
-      .then(function(){ banner(null); loaded = true; render(); })
-      .catch(function(){
-        banner("<b>Couldn't reach LADOT live data.</b> If you're viewing this inside a sandboxed preview, external API calls may be blocked — deploy the file (GitHub Pages works) and it will connect. Otherwise the city feed may be briefly down.");
-      })
-      .then(function(){ $("refreshBtn").style.opacity = 1; timerLeft = REFRESH_SECS; });
+  function locate(){
+    return new Promise(function(res,rej){
+      if(!navigator.geolocation)return rej("no geo");
+      navigator.geolocation.getCurrentPosition(function(p){
+        userPos=[p.coords.latitude,p.coords.longitude];
+        if(youMarker)map.removeLayer(youMarker);
+        youMarker=L.circleMarker(userPos,{radius:7,color:"#00E5FF",weight:2,fillColor:"#00E5FF",fillOpacity:.9}).addTo(map);
+        res(userPos);
+      },function(){rej("denied");},{enableHighAccuracy:true,timeout:9000});
+    });
   }
 
+  function guide(){
+    var btn=$("guideBtn");
+    btn.disabled=true;btn.textContent="LOCATING…";
+    locate().then(function(pos){
+      map.setView(pos,15);
+      var open=bestOpen(pos,4000);
+      var target;
+      if(open.length){target=open[0];}
+      else{
+        // no live-sensor vacancy nearby: fall back to nearest metered block
+        var best=null;
+        Object.keys(inventory).forEach(function(id){
+          var it=inventory[id],d=dist(pos[0],pos[1],it.lat,it.lng);
+          if(!best||d<best.d)best={id:id,it:it,d:d};
+        });
+        target=best;
+      }
+      if(!target){throw "no meters";}
+      btn.textContent="ROUTING…";
+      var url=OSRM+pos[1]+","+pos[0]+";"+target.it.lng+","+target.it.lat+"?overview=full&geometries=geojson";
+      return fetch(url).then(function(r){return r.ok?r.json():null;}).catch(function(){return null;})
+        .then(function(j){
+          routeLayer.clearLayers();
+          var line=null,secs=null,meters=target.d;
+          if(j&&j.routes&&j.routes[0]){
+            line=j.routes[0].geometry.coordinates.map(function(c){return [c[1],c[0]];});
+            secs=j.routes[0].duration; meters=j.routes[0].distance;
+          } else { line=[pos,[target.it.lat,target.it.lng]]; }
+          // light trail: soft outer + hot core
+          L.polyline(line,{color:"#00FF9C",weight:9,opacity:.18}).addTo(routeLayer);
+          L.polyline(line,{color:"#00FF9C",weight:3,opacity:.95,dashArray:"1 10",lineCap:"round"}).addTo(routeLayer);
+          map.fitBounds(L.latLngBounds(line).pad(.25));
+          var m=markers[target.id]; if(m)m.openPopup();
+          var live=stateOf(target.id)==="open";
+          $("hudEta").firstChild.nodeValue = secs?Math.max(1,Math.round(secs/60))+"MIN":"~";
+          $("hudDist").textContent=fmtDist(meters)+(live?" · LIVE OPEN":" · NEAREST METERS");
+          $("hudAddr").textContent=target.it.addr;
+          $("hudMeta").textContent=[target.it.rate,target.it.limit?target.it.limit+" LIMIT":""].filter(Boolean).join(" · ")||"METERED BLOCK";
+          $("hudNav").href="https://www.google.com/maps/dir/?api=1&destination="+target.it.lat+","+target.it.lng;
+          $("hud").classList.add("show");
+          $("sheet").classList.remove("show");
+        });
+    }).catch(function(e){
+      banner(e==="denied"
+        ? "<b>LOCATION DENIED.</b> Allow location access to be guided from where you are."
+        : "<b>COULDN'T ROUTE.</b> "+e);
+    }).then(function(){btn.disabled=false;btn.innerHTML="&#9654;&nbsp;GUIDE&nbsp;ME";});
+  }
+
+  // ---------- loop / boot ----------
+  function refresh(){
+    $("refreshBtn").style.opacity=.4;
+    loadOccupancy().then(function(){banner(null);loaded=true;render();})
+      .catch(function(){banner("<b>LIVE FEED UNREACHABLE.</b> Sandbox previews block external APIs — this connects once deployed.");})
+      .then(function(){$("refreshBtn").style.opacity=1;timerLeft=REFRESH_SECS;});
+  }
   setInterval(function(){
     timerLeft--;
-    $("countdown").textContent = "REFRESH " + (timerLeft<10?"0":"") + timerLeft + "s";
-    if(timerLeft<=0) refresh();
-  }, 1000);
+    $("countdown").textContent="SYNC "+(timerLeft<10?"0":"")+timerLeft+"S";
+    if(timerLeft<=0)refresh();
+  },1000);
 
-  // ---------------- boot ----------------
-  $("statline").textContent = "CONNECTING TO LADOT…";
-  loadInventory()
-    .then(function(){ return loadOccupancy(); })
-    .then(function(){ loaded = true; render(); $("sheet").hidden = false; layoutBottom(); })
-    .catch(function(){
-      banner("<b>Couldn't load LADOT data.</b> If you're viewing this inside a sandboxed preview, external API calls may be blocked — deploy the file (GitHub Pages is the fastest test) and it will pull live data from data.lacity.org.");
-      $("statline").textContent = "OFFLINE";
-    });
+  $("statline").textContent="LINKING GRID…";
+  loadInventory().then(loadOccupancy).then(function(){
+    loaded=true;render();$("sheet").classList.add("show");
+  }).catch(function(){
+    banner("<b>COULDN'T LOAD LADOT DATA.</b> Sandbox previews block external APIs — deploy the file and it will pull live from data.lacity.org.");
+    $("statline").textContent="OFFLINE";
+  });
 
-  map.on("moveend zoomend", render);
+  map.on("moveend zoomend",render);
 
-  // ---------------- UI wiring ----------------
-  Array.prototype.forEach.call(document.querySelectorAll(".chip[data-area]"), function(chip){
-    chip.addEventListener("click", function(){
-      document.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("active"); });
+  Array.prototype.forEach.call(document.querySelectorAll(".chip[data-lat]"),function(chip){
+    chip.addEventListener("click",function(){
+      document.querySelectorAll(".chip").forEach(function(c){c.classList.remove("active");});
       chip.classList.add("active");
-      map.setView([parseFloat(chip.dataset.lat), parseFloat(chip.dataset.lng)], parseInt(chip.dataset.z,10));
+      map.setView([parseFloat(chip.dataset.lat),parseFloat(chip.dataset.lng)],parseInt(chip.dataset.z,10));
     });
   });
-
-  $("locateChip").addEventListener("click", function(){
-    document.querySelectorAll(".chip").forEach(function(c){ c.classList.remove("active"); });
-    this.classList.add("active");
-    if(!navigator.geolocation){ banner("<b>No geolocation available</b> in this browser."); return; }
-    navigator.geolocation.getCurrentPosition(function(p){
-      userPos = [p.coords.latitude, p.coords.longitude];
-      if(youMarker) map.removeLayer(youMarker);
-      youMarker = L.circleMarker(userPos, {radius:7, color:"#F2F4F6", weight:2, fillColor:"#F2F4F6", fillOpacity:.9}).addTo(map);
-      map.setView(userPos, 16);
-    }, function(){
-      banner("<b>Location denied.</b> Ranking open meters from map center instead.");
-    }, {enableHighAccuracy:true, timeout:8000});
-  });
-
-  $("refreshBtn").addEventListener("click", refresh);
-
-  function layoutBottom(){
-    var open = !$("sheet").hidden;
-    var h = open ? $("sheet").offsetHeight + 18 : 10;
-    $("legend").style.bottom = "calc(env(safe-area-inset-bottom) + " + h + "px)";
-    $("fabCol").style.bottom = "calc(env(safe-area-inset-bottom) + " + h + "px)";
-  }
-  $("sheetBtn").addEventListener("click", function(){
-    $("sheet").hidden = !$("sheet").hidden;
-    layoutBottom();
-  });
-  window.addEventListener("resize", layoutBottom);
-  new MutationObserver(layoutBottom).observe($("spots"), {childList:true, subtree:true});
+  $("locBtn").addEventListener("click",function(){locate().then(function(p){map.setView(p,16);}).catch(function(){banner("<b>LOCATION DENIED.</b>");});});
+  $("refreshBtn").addEventListener("click",refresh);
+  $("sheetBtn").addEventListener("click",function(){$("sheet").classList.toggle("show");$("hud").classList.remove("show");});
+  $("guideBtn").addEventListener("click",guide);
+  $("hudClose").addEventListener("click",function(){$("hud").classList.remove("show");routeLayer.clearLayers();});
 })();
 </script>
 </body>
